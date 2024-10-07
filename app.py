@@ -5,6 +5,7 @@ from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import requests
 import io
@@ -107,6 +108,17 @@ st.markdown("""
         width: 100%;
         height: 100%;
     }
+    .metrics {
+        background-color: #f0f9ff;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 20px;
+    }
+    .metric-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #0284c7;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,6 +160,23 @@ with col1:
             
             st.markdown("---")
             st.markdown(f"<p class='medium-font'>Estimated Fare: ${predicted_fare:.2f}</p>", unsafe_allow_html=True)
+            
+            # Calculate performance metrics
+            y_true = df['fare']
+            y_pred = model.predict(scaler.transform(np.log1p(df[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']])))
+            
+            mse = mean_squared_error(y_true, y_pred)
+            mae = mean_absolute_error(y_true, y_pred)
+            r2 = r2_score(y_true, y_pred)
+            
+            # Display metrics in the right column
+            with col2:
+                st.markdown("<div class='metrics'>", unsafe_allow_html=True)
+                st.markdown("<h3>Model Performance Metrics</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p>Mean Squared Error: <span class='metric-value'>{mse:.4f}</span></p>", unsafe_allow_html=True)
+                st.markdown(f"<p>Mean Absolute Error: <span class='metric-value'>{mae:.4f}</span></p>", unsafe_allow_html=True)
+                st.markdown(f"<p>R-squared Score: <span class='metric-value'>{r2:.4f}</span></p>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.error("Not an operated route.")
     
