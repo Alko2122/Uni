@@ -8,8 +8,9 @@ from sklearn.ensemble import RandomForestRegressor
 import joblib
 import requests
 import io
-import gdown
 import tempfile
+import os
+import gdown
 
 # File URLs
 MODEL_URL = "https://drive.google.com/uc?id=1NjXo2WpoSKCQqzQg_juYO83xf1Lhr-ks"
@@ -23,26 +24,23 @@ def load_data(url):
 @st.cache_resource
 def download_file(url):
     response = requests.get(url)
-    st.write(f"Response status code: {response.status_code}")
-    st.write(f"Response content type: {response.headers.get('Content-Type')}")
-    st.write(f"Response content length: {len(response.content)} bytes")
-    try:
+    if response.status_code == 200:
         return joblib.load(io.BytesIO(response.content))
-    except Exception as e:
-        st.error(f"Error loading file: {str(e)}")
+    else:
+        st.error(f"Failed to download file from {url}. Status code: {response.status_code}")
         return None
 
 @st.cache_resource
 def download_model(url):
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        gdown.download(url, tmp_file.name, quiet=False)
-        st.write(f"Model file size: {os.path.getsize(tmp_file.name)} bytes")
-        try:
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            gdown.download(url, tmp_file.name, quiet=False)
+            st.write(f"Model file size: {os.path.getsize(tmp_file.name)} bytes")
             model = joblib.load(tmp_file.name)
-            return model
-        except Exception as e:
-            st.error(f"Error loading model: {str(e)}")
-            return None
+        return model
+    except Exception as e:
+        st.error(f"Error downloading or loading model: {str(e)}")
+        return None
 
 @st.cache_resource
 def load_model_and_scaler():
@@ -54,12 +52,29 @@ def load_model_and_scaler():
 df = load_data(CSV_URL)
 model, scaler = load_model_and_scaler()
 
-if model is None or scaler is None:
-    st.error("Failed to load model or scaler. Please check the console for more information.")
-else:
-    st.success("Model and scaler loaded successfully!")
+st.title("Airline Fare Prediction")
 
-# ... (rest of your code remains the same)
+if model is None:
+    st.warning("The model file could not be loaded automatically. Please upload it manually.")
+    uploaded_file = st.file_uploader("Choose the model file", type=["joblib", "pkl"])
+    if uploaded_file is not None:
+        model = joblib.load(uploaded_file)
+        st.success("Model loaded successfully!")
+
+if scaler is None:
+    st.error("Failed to load the scaler. Please check the scaler URL and try again.")
+
+# Rest of your Streamlit app code here
+# ...
+
+if st.button("Predict Fare") and model is not None and scaler is not None:
+    # Your prediction code here
+    # ...
+    st.success(f"Predicted fare: ${pred_fare:.2f}")
+elif model is None:
+    st.error("Please upload the model file to make predictions.")
+elif scaler is None:
+    st.error("Failed to load the scaler. Please check the scaler URL and try again.")
 # Custom CSS for a cleaner look with white background
 st.markdown("""
 <style>
