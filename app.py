@@ -52,7 +52,7 @@ def load_model_and_scaler():
 df = load_data(CSV_URL)
 model, scaler = load_model_and_scaler()
 
-st.title("Airline Fare Prediction")
+st.title("SkyFare Consultants")
 
 if model is None:
     st.warning("The model file could not be loaded automatically. Please upload it manually.")
@@ -85,7 +85,7 @@ st.markdown("""
     .stButton>button {
         background-color: #0284c7;
         color: white;
-        border-radius: 5px;
+        border-radius: 10px;
         border: none;
         padding: 10px 24px;
         transition: all 0.3s ease;
@@ -129,7 +129,7 @@ col1, col2 = st.columns([6, 4])
 
 with col1:
     st.markdown("<div class='predictor'>", unsafe_allow_html=True)
-    st.markdown("<p class='medium-font'>Discover your next flight's price effortlessly</p>", unsafe_allow_html=True)
+    st.markdown("<p class='medium-font'>Discover the fare charged for a specific number of passengers</p>", unsafe_allow_html=True)
     st.markdown("<p class='small-font'>SkyFare Predictor uses advanced machine learning to estimate flight costs. Enter your travel details below and let our AI do the rest.</p>", unsafe_allow_html=True)
 
     # Input form
@@ -163,7 +163,7 @@ with col1:
             st.markdown("---")
             st.markdown(f"<p class='medium-font'>Estimated Fare: ${predicted_fare:.2f}</p>", unsafe_allow_html=True)
         else:
-            st.error("Could not locate one or both airports. Please check your inputs.")
+            st.error("Not an operated route.")
     
     st.markdown("</div>", unsafe_allow_html=True)
 
