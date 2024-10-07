@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,13 +6,35 @@ from geopy.distance import geodesic
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 import joblib
+import requests
+import io
 
-# File paths
-CSV_PATH = r"C:\Users\alkoj\OneDrive\Uni\Business Intelligence\Data set\Airline Dataset - Cleaned (CSV) (Readjusted).csv"
-MODEL_PATH = r"C:\Users\alkoj\OneDrive\Uni\Business Intelligence\your_trained_model.joblib"
-SCALER_PATH = r"C:\Users\alkoj\OneDrive\Uni\Business Intelligence\your_scaler.joblib"
+# File URLs
+MODEL_URL = "https://drive.google.com/uc?export=download&id=1NjXo2WpoSKCQqzQg_juYO83xf1Lhr-ks"
+SCALER_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/your_scaler.joblib"
+CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 VIDEO_PATH = r"C:\Users\alkoj\Downloads\Airline Offer Your Story Gehra Neela par Halka Neela aur Halka Peela ke saath Playful Style.mp4"  # Replace with your local video file path
 
+@st.cache_data
+def load_data(url):
+    return pd.read_csv(url)
+
+@st.cache_resource
+def download_file(url):
+    response = requests.get(url)
+    return joblib.load(io.BytesIO(response.content))
+
+@st.cache_resource
+def load_model_and_scaler():
+    model = download_file(MODEL_URL)
+    scaler = download_file(SCALER_URL)
+    return model, scaler
+
+# Load data, model, and scaler
+df = load_data(CSV_URL)
+model, scaler = load_model_and_scaler()
+
+# ... (rest of your code remains the same)
 # Custom CSS for a cleaner look with white background
 st.markdown("""
 <style>
@@ -59,20 +80,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-@st.cache_data
-def load_data(file_path):
-    return pd.read_csv(file_path)
-
-@st.cache_resource
-def load_model_and_scaler():
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-    return model, scaler
-
-# Load data, model, and scaler
-df = load_data(CSV_PATH)
-model, scaler = load_model_and_scaler()
 
 # App layout
 st.markdown("<p class='big-font'>SkyFare Predictor</p>", unsafe_allow_html=True)
