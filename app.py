@@ -63,10 +63,7 @@ if model is None:
 
 if scaler is None:
     st.error("Failed to load the scaler. Please check the scaler URL and try again.")
-
-# Rest of your Streamlit app code here
-# ...
-
+    
 # Custom CSS for a cleaner look with white background
 st.markdown("""
 <style>
