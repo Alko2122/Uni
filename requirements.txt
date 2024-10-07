@@ -6,3 +6,4 @@ geopy
 joblib
 gdown
 matplotlib
+seaborn
