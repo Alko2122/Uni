@@ -7,4 +7,4 @@ joblib
 gdown
 matplotlib
 seaborn
-statsmodel
+statsmodels
