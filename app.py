@@ -20,7 +20,11 @@ CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e
 
 @st.cache_data
 def load_data(url):
-    return pd.read_csv(url)
+    df = pd.read_csv(url)
+    # Feature engineering
+    df['passenger_density'] = df['passengers'] / df['nsmiles']
+    df['fare_per_mile'] = df['fare'] / df['nsmiles']
+    return df
 
 @st.cache_resource
 def download_file(url):
@@ -162,8 +166,11 @@ with col1:
             st.markdown(f"<p class='medium-font'>Estimated Fare: ${predicted_fare:.2f}</p>", unsafe_allow_html=True)
             
             # Calculate performance metrics
+            X = df[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
             y_true = df['fare']
-            y_pred = model.predict(scaler.transform(np.log1p(df[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']])))
+            X_log = np.log1p(X)
+            X_scaled = scaler.transform(X_log)
+            y_pred = model.predict(X_scaled)
             
             mse = mean_squared_error(y_true, y_pred)
             mae = mean_absolute_error(y_true, y_pred)
