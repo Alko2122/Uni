@@ -14,31 +14,132 @@ import joblib
 import requests
 import io
 
-# Custom CSS to create a background similar to the luxury line abstract design
-st.markdown("""
-<style>
-    .stApp {
-        background: linear-gradient(135deg, #ffffff 25%, #f0f0f0 25%, #f0f0f0 50%, #ffffff 50%, #ffffff 75%, #f0f0f0 75%, #f0f0f0 100%);
-        background-size: 20px 20px;
-        background-attachment: fixed;
-    }
-    .luxury-card {
-        background-color: rgba(255, 255, 255, 0.8);
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-    .sidebar .block-container {
-        background-color: rgba(255, 255, 255, 0.9);
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # File URL
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
-# ... [rest of the import and function definitions remain the same]
+@st.cache_data
+def load_data(url):
+    return pd.read_csv(url)
+
+def remove_outliers(df, columns, lower_quantile=0.20, upper_quantile=0.90):
+    df_clean = df.copy()
+    for column in columns:
+        Q1 = df_clean[column].quantile(lower_quantile)
+        Q3 = df_clean[column].quantile(upper_quantile)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        df_clean = df_clean[(df_clean[column] >= lower_bound) & (df_clean[column] <= upper_bound)]
+    return df_clean
+
+def apply_log_transform(df, columns):
+    df_log = df.copy()
+    for column in columns:
+        df_log[column] = np.log(df_log[column] + 1e-6)  # Apply log transformation
+    return df_log
+
+@st.cache_resource
+def prepare_model_and_data(df):
+    # Feature engineering
+    df['passenger_density'] = df['passengers'] / df['nsmiles']
+    df['fare_per_mile'] = df['fare'] / df['nsmiles']
+    
+    # Remove outliers
+    features = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    df_clean = remove_outliers(df, features)
+    
+    # Filter out rows with non-positive values before applying log transformation
+    df_clean = df_clean[(df_clean['passengers'] > 0) & (df_clean['large_ms'] > 0) & (df_clean['nsmiles'] > 0)]
+    
+    # Prepare the data
+    data = df_clean[features].dropna()
+    
+    # Apply log transformation to features (except target variable)
+    X = data[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
+    X_log = np.log1p(X)
+    y = data['fare']
+    
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X_log, y, test_size=0.2, random_state=42)
+    
+    # Scale the features
+    scaler = StandardScaler()
+    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
+    
+    # Create and train the Random Forest model
+    rf_model = RandomForestRegressor(
+        n_estimators=200,
+        max_depth=15,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        max_features='sqrt',
+        random_state=42,
+        n_jobs=-1
+    )
+    rf_model.fit(X_train_scaled, y_train)
+    
+    # Predictions and evaluation
+    y_pred_rf = rf_model.predict(X_test_scaled)
+    
+    # Calculate metrics
+    mae = mean_absolute_error(y_test, y_pred_rf)
+    mse = mean_squared_error(y_test, y_pred_rf)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, y_pred_rf)
+    
+    return rf_model, scaler, mae, mse, rmse, r2, df_clean, X_test_scaled, y_test, y_pred_rf
+
+def plot_correlation_matrix(df):
+    columns_to_include = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    data_for_correlation = df[columns_to_include].dropna()
+    correlation_matrix = data_for_correlation.corr()
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", square=True, cbar_kws={"shrink": .8}, ax=ax)
+    plt.title('Correlation Matrix')
+    plt.tight_layout()
+    return fig
+
+def plot_vif(df):
+    features = ['large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    X = df[features]
+    vif_data = pd.DataFrame()
+    vif_data["Variable"] = X.columns
+    vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+    vif_data = vif_data.sort_values('VIF', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(vif_data['Variable'], vif_data['VIF'])
+    ax.set_title('Variance Inflation Factor for Each Feature')
+    ax.set_xlabel('Features')
+    ax.set_ylabel('VIF')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return fig, vif_data
+
+def plot_actual_vs_predicted(y_test, y_pred):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(y_test, y_pred, alpha=0.5)
+    ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', linestyle='--')
+    ax.set_title('Actual vs Predicted Fare')
+    ax.set_xlabel('Actual Fare')
+    ax.set_ylabel('Predicted Fare')
+    ax.grid()
+    return fig
+
+def plot_feature_importance(model, X):
+    feature_importance = pd.DataFrame({'feature': X.columns, 'importance': model.feature_importances_})
+    feature_importance = feature_importance.sort_values('importance', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(feature_importance['feature'], feature_importance['importance'])
+    ax.set_title('Feature Importance')
+    ax.set_xlabel('Features')
+    ax.set_ylabel('Importance')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return fig, feature_importance
 
 # Load data and prepare model
 df = load_data(CSV_URL)
@@ -51,41 +152,30 @@ if st.button("Show Model Metrics and Visualizations"):
     st.sidebar.title("Model Metrics and Visualizations")
     
     st.sidebar.markdown("## Model Accuracy Metrics")
-    st.sidebar.markdown('<div class="luxury-card">', unsafe_allow_html=True)
     st.sidebar.write(f"Mean Absolute Error (MAE): {mae:.2f}")
     st.sidebar.write(f"Mean Squared Error (MSE): {mse:.2f}")
     st.sidebar.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
     st.sidebar.write(f"R² Score: {r2:.4f}")
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     st.sidebar.markdown("## Correlation Matrix")
-    st.sidebar.markdown('<div class="luxury-card">', unsafe_allow_html=True)
     corr_fig = plot_correlation_matrix(df_clean)
     st.sidebar.pyplot(corr_fig)
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     st.sidebar.markdown("## Variance Inflation Factor")
-    st.sidebar.markdown('<div class="luxury-card">', unsafe_allow_html=True)
     vif_fig, vif_data = plot_vif(df_clean)
     st.sidebar.pyplot(vif_fig)
     st.sidebar.dataframe(vif_data)
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     st.sidebar.markdown("## Actual vs Predicted Fare")
-    st.sidebar.markdown('<div class="luxury-card">', unsafe_allow_html=True)
     actual_vs_pred_fig = plot_actual_vs_predicted(y_test, y_pred_rf)
     st.sidebar.pyplot(actual_vs_pred_fig)
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     st.sidebar.markdown("## Feature Importance")
-    st.sidebar.markdown('<div class="luxury-card">', unsafe_allow_html=True)
     feature_imp_fig, feature_importance = plot_feature_importance(model, X_test_scaled)
     st.sidebar.pyplot(feature_imp_fig)
     st.sidebar.dataframe(feature_importance)
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 # Input form with widgets
-st.markdown('<div class="luxury-card">', unsafe_allow_html=True)
 st.markdown("## Fare Prediction")
 
 # Create a list of unique airports
@@ -136,8 +226,6 @@ if st.button("Calculate Fare"):
         st.write(f"Flight Distance: {distance_value:.2f} miles")
     else:
         st.error("Unable to geocode one or both of the airports. Please try different airports.")
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
