@@ -38,6 +38,10 @@ def load_data(url):
     non_numeric_imputer = SimpleImputer(strategy='most_frequent')
     df[non_numeric_columns] = non_numeric_imputer.fit_transform(df[non_numeric_columns])
     
+    # Feature engineering
+    df['passenger_density'] = df['passengers'] / df['nsmiles']
+    df['fare_per_mile'] = df['fare'] / df['nsmiles']
+    
     return df
 
 @st.cache_resource
@@ -73,7 +77,7 @@ model, scaler = load_model_and_scaler()
 
 # Calculate model accuracy
 def calculate_model_accuracy(model, scaler, df):
-    X = df[['passengers', 'large_ms', 'nsmiles']]  # Adjust these features as per your model
+    X = df[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
     y = df['fare']
     
     X_scaled = scaler.transform(X)
@@ -104,8 +108,38 @@ st.markdown("## Model Accuracy Metrics")
 st.write(f"Mean Squared Error (MSE): {mse:.4f}")
 st.write(f"R-squared (R2) Score: {r2:.4f}")
 
-# Rest of your Streamlit app code...
-# (Include your input form, prediction logic, and result display here)
+# Input form
+st.markdown("## Fare Prediction")
+departure_airport = st.selectbox("Departure Airport", sorted(df['airport_1'].unique()))
+arrival_airport = st.selectbox("Arrival Airport", sorted(df['airport_1'].unique()))
+passenger_count = st.slider("Number of Passengers", 1, 100, 1)
+
+if st.button("Calculate Fare"):
+    geolocator = Nominatim(user_agent="SkyFarePredictor")
+    
+    departure_location = geolocator.geocode(f"{departure_airport}, USA")
+    arrival_location = geolocator.geocode(f"{arrival_airport}, USA")
+    
+    if departure_location and arrival_location:
+        distance = geodesic(
+            (departure_location.latitude, departure_location.longitude),
+            (arrival_location.latitude, arrival_location.longitude)
+        ).miles
+        
+        passenger_density = passenger_count / distance
+        fare_per_mile = df['fare_per_mile'].mean()  # Use mean fare_per_mile as an estimate
+        
+        input_data = pd.DataFrame([[passenger_count, 0, distance, passenger_density, fare_per_mile]],
+                                  columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
+        
+        input_data_scaled = scaler.transform(input_data)
+        
+        predicted_fare = model.predict(input_data_scaled)[0]
+        
+        st.markdown("---")
+        st.markdown(f"<p class='medium-font'>Estimated Fare: ${predicted_fare:.2f}</p>", unsafe_allow_html=True)
+    else:
+        st.error("Not an operated route.")
 
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
