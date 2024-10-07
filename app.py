@@ -1,3 +1,10 @@
+streamlit
+pandas
+numpy
+scikit-learn
+geopy
+joblib
+
 import streamlit as st
 import pandas as pd
 import numpy as np
