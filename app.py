@@ -1,12 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 import joblib
 import requests
 import io
@@ -37,19 +40,19 @@ def apply_log_transform(df, columns):
 
 @st.cache_resource
 def prepare_model_and_data(df):
+    # Feature engineering
+    df['passenger_density'] = df['passengers'] / df['nsmiles']
+    df['fare_per_mile'] = df['fare'] / df['nsmiles']
+    
     # Remove outliers
-    features = ['fare', 'large_ms', 'nsmiles', 'passengers']
+    features = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
     df_clean = remove_outliers(df, features)
     
     # Filter out rows with non-positive values before applying log transformation
     df_clean = df_clean[(df_clean['passengers'] > 0) & (df_clean['large_ms'] > 0) & (df_clean['nsmiles'] > 0)]
     
-    # Feature engineering
-    df_clean['passenger_density'] = df_clean['passengers'] / df_clean['nsmiles']
-    df_clean['fare_per_mile'] = df_clean['fare'] / df_clean['nsmiles']
-    
     # Prepare the data
-    data = df_clean[['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']].dropna()
+    data = df_clean[features].dropna()
     
     # Apply log transformation to features (except target variable)
     X = data[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
@@ -85,20 +88,92 @@ def prepare_model_and_data(df):
     rmse = np.sqrt(mse)
     r2 = r2_score(y_test, y_pred_rf)
     
-    return rf_model, scaler, mae, mse, rmse, r2, df_clean
+    return rf_model, scaler, mae, mse, rmse, r2, df_clean, X_test_scaled, y_test, y_pred_rf
+
+def plot_correlation_matrix(df):
+    columns_to_include = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    data_for_correlation = df[columns_to_include].dropna()
+    correlation_matrix = data_for_correlation.corr()
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", square=True, cbar_kws={"shrink": .8}, ax=ax)
+    plt.title('Correlation Matrix')
+    plt.tight_layout()
+    return fig
+
+def plot_vif(df):
+    features = ['large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    X = df[features]
+    vif_data = pd.DataFrame()
+    vif_data["Variable"] = X.columns
+    vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+    vif_data = vif_data.sort_values('VIF', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(vif_data['Variable'], vif_data['VIF'])
+    ax.set_title('Variance Inflation Factor for Each Feature')
+    ax.set_xlabel('Features')
+    ax.set_ylabel('VIF')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return fig, vif_data
+
+def plot_actual_vs_predicted(y_test, y_pred):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(y_test, y_pred, alpha=0.5)
+    ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', linestyle='--')
+    ax.set_title('Actual vs Predicted Fare')
+    ax.set_xlabel('Actual Fare')
+    ax.set_ylabel('Predicted Fare')
+    ax.grid()
+    return fig
+
+def plot_feature_importance(model, X):
+    feature_importance = pd.DataFrame({'feature': X.columns, 'importance': model.feature_importances_})
+    feature_importance = feature_importance.sort_values('importance', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(feature_importance['feature'], feature_importance['importance'])
+    ax.set_title('Feature Importance')
+    ax.set_xlabel('Features')
+    ax.set_ylabel('Importance')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return fig, feature_importance
 
 # Load data and prepare model
 df = load_data(CSV_URL)
-model, scaler, mae, mse, rmse, r2, df_clean = prepare_model_and_data(df)
+model, scaler, mae, mse, rmse, r2, df_clean, X_test_scaled, y_test, y_pred_rf = prepare_model_and_data(df)
 
 st.title("SkyFare Consultants")
 
-# Display model accuracy metrics
-st.markdown("## Model Accuracy Metrics")
-st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-st.write(f"Mean Squared Error (MSE): {mse:.2f}")
-st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
-st.write(f"R² Score: {r2:.4f}")
+# Button to open model metrics panel
+if st.button("Show Model Metrics and Visualizations"):
+    st.sidebar.title("Model Metrics and Visualizations")
+    
+    st.sidebar.markdown("## Model Accuracy Metrics")
+    st.sidebar.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+    st.sidebar.write(f"Mean Squared Error (MSE): {mse:.2f}")
+    st.sidebar.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
+    st.sidebar.write(f"R² Score: {r2:.4f}")
+    
+    st.sidebar.markdown("## Correlation Matrix")
+    corr_fig = plot_correlation_matrix(df_clean)
+    st.sidebar.pyplot(corr_fig)
+    
+    st.sidebar.markdown("## Variance Inflation Factor")
+    vif_fig, vif_data = plot_vif(df_clean)
+    st.sidebar.pyplot(vif_fig)
+    st.sidebar.dataframe(vif_data)
+    
+    st.sidebar.markdown("## Actual vs Predicted Fare")
+    actual_vs_pred_fig = plot_actual_vs_predicted(y_test, y_pred_rf)
+    st.sidebar.pyplot(actual_vs_pred_fig)
+    
+    st.sidebar.markdown("## Feature Importance")
+    feature_imp_fig, feature_importance = plot_feature_importance(model, X_test_scaled)
+    st.sidebar.pyplot(feature_imp_fig)
+    st.sidebar.dataframe(feature_importance)
 
 # Input form with widgets
 st.markdown("## Fare Prediction")
