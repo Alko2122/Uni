@@ -6,6 +6,7 @@ from geopy.distance import geodesic
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.impute import SimpleImputer
 import joblib
 import requests
 import io
@@ -24,7 +25,15 @@ def load_data(url):
     # Feature engineering
     df['passenger_density'] = df['passengers'] / df['nsmiles']
     df['fare_per_mile'] = df['fare'] / df['nsmiles']
-    return df
+    
+    # Handle infinite values
+    df = df.replace([np.inf, -np.inf], np.nan)
+    
+    # Impute NaN values
+    imputer = SimpleImputer(strategy='mean')
+    df_imputed = pd.DataFrame(imputer.fit_transform(df), columns=df.columns)
+    
+    return df_imputed
 
 @st.cache_resource
 def download_file(url):
