@@ -5,7 +5,8 @@ from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.impute import SimpleImputer
 import joblib
 import requests
@@ -15,8 +16,6 @@ import os
 import gdown
 
 # File URLs
-MODEL_URL = "https://drive.google.com/uc?id=1NjXo2WpoSKCQqzQg_juYO83xf1Lhr-ks"
-SCALER_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/your_scaler.joblib"
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
 @st.cache_data
@@ -38,75 +37,57 @@ def load_data(url):
     non_numeric_imputer = SimpleImputer(strategy='most_frequent')
     df[non_numeric_columns] = non_numeric_imputer.fit_transform(df[non_numeric_columns])
     
-    # Feature engineering
-    df['passenger_density'] = df['passengers'] / df['nsmiles']
-    df['fare_per_mile'] = df['fare'] / df['nsmiles']
-    
     return df
 
 @st.cache_resource
-def download_file(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        return joblib.load(io.BytesIO(response.content))
-    else:
-        st.error(f"Failed to download file from {url}. Status code: {response.status_code}")
-        return None
-
-@st.cache_resource
-def download_model(url):
-    try:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            gdown.download(url, tmp_file.name, quiet=False)
-            st.write(f"Model file size: {os.path.getsize(tmp_file.name)} bytes")
-            model = joblib.load(tmp_file.name)
-        return model
-    except Exception as e:
-        st.error(f"Error downloading or loading model: {str(e)}")
-        return None
-
-@st.cache_resource
-def load_model_and_scaler():
-    model = download_model(MODEL_URL)
-    scaler = download_file(SCALER_URL)
-    return model, scaler
-
-# Load data, model, and scaler
-df = load_data(CSV_URL)
-model, scaler = load_model_and_scaler()
-
-# Calculate model accuracy
-def calculate_model_accuracy(model, scaler, df):
-    X = df[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
+def prepare_model_and_data(df):
+    # Prepare features and target
+    X = df[['passengers', 'large_ms', 'nsmiles']]
     y = df['fare']
     
-    X_scaled = scaler.transform(X)
-    y_pred = model.predict(X_scaled)
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    mse = mean_squared_error(y, y_pred)
-    r2 = r2_score(y, y_pred)
+    # Scale the features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
     
-    return mse, r2
+    # Create and train the Random Forest model
+    rf_model = RandomForestRegressor(
+        n_estimators=200,
+        max_depth=15,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        max_features='sqrt',
+        random_state=42,
+        n_jobs=-1
+    )
+    rf_model.fit(X_train_scaled, y_train)
+    
+    # Predictions and evaluation
+    y_pred_rf = rf_model.predict(X_test_scaled)
+    
+    # Calculate metrics
+    mae = mean_absolute_error(y_test, y_pred_rf)
+    mse = mean_squared_error(y_test, y_pred_rf)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, y_pred_rf)
+    
+    return rf_model, scaler, mae, mse, rmse, r2
 
-# Calculate accuracy metrics
-mse, r2 = calculate_model_accuracy(model, scaler, df)
+# Load data and prepare model
+df = load_data(CSV_URL)
+model, scaler, mae, mse, rmse, r2 = prepare_model_and_data(df)
 
 st.title("SkyFare Consultants")
 
-if model is None:
-    st.warning("The model file could not be loaded automatically. Please upload it manually.")
-    uploaded_file = st.file_uploader("Choose the model file", type=["joblib", "pkl"])
-    if uploaded_file is not None:
-        model = joblib.load(uploaded_file)
-        st.success("Model loaded successfully!")
-
-if scaler is None:
-    st.error("Failed to load the scaler. Please check the scaler URL and try again.")
-
 # Display model accuracy metrics
 st.markdown("## Model Accuracy Metrics")
-st.write(f"Mean Squared Error (MSE): {mse:.4f}")
-st.write(f"R-squared (R2) Score: {r2:.4f}")
+st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
+st.write(f"R² Score: {r2:.4f}")
 
 # Input form
 st.markdown("## Fare Prediction")
@@ -126,11 +107,8 @@ if st.button("Calculate Fare"):
             (arrival_location.latitude, arrival_location.longitude)
         ).miles
         
-        passenger_density = passenger_count / distance
-        fare_per_mile = df['fare_per_mile'].mean()  # Use mean fare_per_mile as an estimate
-        
-        input_data = pd.DataFrame([[passenger_count, 0, distance, passenger_density, fare_per_mile]],
-                                  columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
+        input_data = pd.DataFrame([[passenger_count, 0, distance]],
+                                  columns=['passengers', 'large_ms', 'nsmiles'])
         
         input_data_scaled = scaler.transform(input_data)
         
