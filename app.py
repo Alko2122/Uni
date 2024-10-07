@@ -7,51 +7,62 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.impute import SimpleImputer
 import joblib
 import requests
 import io
-import tempfile
-import os
-import gdown
 
-# File URLs
+# File URL
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
 @st.cache_data
 def load_data(url):
-    df = pd.read_csv(url)
-    
-    # Identify numeric and non-numeric columns
-    numeric_columns = df.select_dtypes(include=[np.number]).columns
-    non_numeric_columns = df.select_dtypes(exclude=[np.number]).columns
-    
-    # Handle infinite values in numeric columns
-    df[numeric_columns] = df[numeric_columns].replace([np.inf, -np.inf], np.nan)
-    
-    # Impute numeric columns
-    numeric_imputer = SimpleImputer(strategy='mean')
-    df[numeric_columns] = numeric_imputer.fit_transform(df[numeric_columns])
-    
-    # Impute non-numeric columns
-    non_numeric_imputer = SimpleImputer(strategy='most_frequent')
-    df[non_numeric_columns] = non_numeric_imputer.fit_transform(df[non_numeric_columns])
-    
-    return df
+    return pd.read_csv(url)
+
+def remove_outliers(df, columns, lower_quantile=0.20, upper_quantile=0.90):
+    df_clean = df.copy()
+    for column in columns:
+        Q1 = df_clean[column].quantile(lower_quantile)
+        Q3 = df_clean[column].quantile(upper_quantile)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        df_clean = df_clean[(df_clean[column] >= lower_bound) & (df_clean[column] <= upper_bound)]
+    return df_clean
+
+def apply_log_transform(df, columns):
+    df_log = df.copy()
+    for column in columns:
+        df_log[column] = np.log(df_log[column] + 1e-6)  # Apply log transformation
+    return df_log
 
 @st.cache_resource
 def prepare_model_and_data(df):
-    # Prepare features and target
-    X = df[['passengers', 'large_ms', 'nsmiles']]
-    y = df['fare']
+    # Remove outliers
+    features = ['fare', 'large_ms', 'nsmiles', 'passengers']
+    df_clean = remove_outliers(df, features)
     
-    # Split the data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Filter out rows with non-positive values before applying log transformation
+    df_clean = df_clean[(df_clean['passengers'] > 0) & (df_clean['large_ms'] > 0) & (df_clean['nsmiles'] > 0)]
+    
+    # Feature engineering
+    df_clean['passenger_density'] = df_clean['passengers'] / df_clean['nsmiles']
+    df_clean['fare_per_mile'] = df_clean['fare'] / df_clean['nsmiles']
+    
+    # Prepare the data
+    data = df_clean[['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']].dropna()
+    
+    # Apply log transformation to features (except target variable)
+    X = data[['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile']]
+    X_log = np.log1p(X)
+    y = data['fare']
+    
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X_log, y, test_size=0.2, random_state=42)
     
     # Scale the features
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
     
     # Create and train the Random Forest model
     rf_model = RandomForestRegressor(
@@ -74,11 +85,11 @@ def prepare_model_and_data(df):
     rmse = np.sqrt(mse)
     r2 = r2_score(y_test, y_pred_rf)
     
-    return rf_model, scaler, mae, mse, rmse, r2
+    return rf_model, scaler, mae, mse, rmse, r2, df_clean
 
 # Load data and prepare model
 df = load_data(CSV_URL)
-model, scaler, mae, mse, rmse, r2 = prepare_model_and_data(df)
+model, scaler, mae, mse, rmse, r2, df_clean = prepare_model_and_data(df)
 
 st.title("SkyFare Consultants")
 
@@ -91,8 +102,8 @@ st.write(f"R² Score: {r2:.4f}")
 
 # Input form
 st.markdown("## Fare Prediction")
-departure_airport = st.selectbox("Departure Airport", sorted(df['airport_1'].unique()))
-arrival_airport = st.selectbox("Arrival Airport", sorted(df['airport_1'].unique()))
+departure_airport = st.selectbox("Departure Airport", sorted(df_clean['airport_1'].unique()))
+arrival_airport = st.selectbox("Arrival Airport", sorted(df_clean['airport_1'].unique()))
 passenger_count = st.slider("Number of Passengers", 1, 100, 1)
 
 if st.button("Calculate Fare"):
@@ -107,10 +118,14 @@ if st.button("Calculate Fare"):
             (arrival_location.latitude, arrival_location.longitude)
         ).miles
         
-        input_data = pd.DataFrame([[passenger_count, 0, distance]],
-                                  columns=['passengers', 'large_ms', 'nsmiles'])
+        passenger_density = passenger_count / distance
+        fare_per_mile = df_clean['fare_per_mile'].mean()  # Use mean fare_per_mile as an estimate
         
-        input_data_scaled = scaler.transform(input_data)
+        input_data = pd.DataFrame([[passenger_count, 0, distance, passenger_density, fare_per_mile]],
+                                  columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
+        
+        input_data_log = np.log1p(input_data)
+        input_data_scaled = scaler.transform(input_data_log)
         
         predicted_fare = model.predict(input_data_scaled)[0]
         
