@@ -67,14 +67,6 @@ if scaler is None:
 # Rest of your Streamlit app code here
 # ...
 
-if st.button("Predict Fare") and model is not None and scaler is not None:
-    # Your prediction code here
-    # ...
-    st.success(f"Predicted fare: ${pred_fare:.2f}")
-elif model is None:
-    st.error("Please upload the model file to make predictions.")
-elif scaler is None:
-    st.error("Failed to load the scaler. Please check the scaler URL and try again.")
 # Custom CSS for a cleaner look with white background
 st.markdown("""
 <style>
