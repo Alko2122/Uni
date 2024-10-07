@@ -100,39 +100,57 @@ st.write(f"Mean Squared Error (MSE): {mse:.2f}")
 st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
 st.write(f"R² Score: {r2:.4f}")
 
-# Input form
+# Input form with widgets
 st.markdown("## Fare Prediction")
-departure_airport = st.selectbox("Departure Airport", sorted(df_clean['airport_1'].unique()))
-arrival_airport = st.selectbox("Arrival Airport", sorted(df_clean['airport_1'].unique()))
-passenger_count = st.slider("Number of Passengers", 1, 100, 1)
+
+# Create a list of unique airports
+unique_airports = list(set(df_clean['airport_1'].unique().tolist() + df_clean['airport_2'].unique().tolist()))
+unique_airports.sort()
+
+# Widgets for selecting airports and passengers
+departure_airport = st.selectbox("Departure Airport:", options=unique_airports)
+arrival_airport = st.selectbox("Arrival Airport:", options=unique_airports)
+passenger_count = st.slider("Number of Passengers:", min_value=1, max_value=1000, value=100, step=1)
+
+# Geopy to calculate distances between airports
+geolocator = Nominatim(user_agent="airport_selector")
+
+def calculate_distance(airport1_coords, airport2_coords):
+    return geodesic(airport1_coords, airport2_coords).miles
 
 if st.button("Calculate Fare"):
-    geolocator = Nominatim(user_agent="SkyFarePredictor")
-    
     departure_location = geolocator.geocode(f"{departure_airport}, USA")
     arrival_location = geolocator.geocode(f"{arrival_airport}, USA")
     
     if departure_location and arrival_location:
-        distance = geodesic(
+        distance_value = calculate_distance(
             (departure_location.latitude, departure_location.longitude),
             (arrival_location.latitude, arrival_location.longitude)
-        ).miles
+        )
         
-        passenger_density = passenger_count / distance
+        # Prepare input for prediction
+        passenger_density = passenger_count / distance_value
         fare_per_mile = df_clean['fare_per_mile'].mean()  # Use mean fare_per_mile as an estimate
         
-        input_data = pd.DataFrame([[passenger_count, 0, distance, passenger_density, fare_per_mile]],
-                                  columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
+        input_data = pd.DataFrame([[
+            passenger_count,
+            0,  # placeholder for large_ms
+            distance_value,
+            passenger_density,
+            fare_per_mile
+        ]], columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
         
         input_data_log = np.log1p(input_data)
-        input_data_scaled = scaler.transform(input_data_log)
+        input_data_scaled = pd.DataFrame(scaler.transform(input_data_log), columns=input_data.columns)
         
-        predicted_fare = model.predict(input_data_scaled)[0]
+        # Predict fare
+        pred_fare = model.predict(input_data_scaled)[0]
         
         st.markdown("---")
-        st.markdown(f"<p class='medium-font'>Estimated Fare: ${predicted_fare:.2f}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p class='medium-font'>Estimated Fare: ${pred_fare:.2f}</p>", unsafe_allow_html=True)
+        st.write(f"Flight Distance: {distance_value:.2f} miles")
     else:
-        st.error("Not an operated route.")
+        st.error("Unable to geocode one or both of the airports. Please try different airports.")
 
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
