@@ -113,9 +113,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# App layout
-st.markdown("<p class='big-font'>SkyFare Predictor</p>", unsafe_allow_html=True)
-
 # Create two columns
 col1, col2 = st.columns([6, 4])
 
