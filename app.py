@@ -17,6 +17,17 @@ import io
 # File URL
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
+st.markdown(
+    """
+    <style>
+    .reportview-container {
+        background: url("https://pngtree.com/freebackground/white-luxury-line-abstract-background_1914967.html");
+    }
+   </style>
+    """,
+    unsafe_allow_html=True
+)
+
 @st.cache_data
 def load_data(url):
     return pd.read_csv(url)
