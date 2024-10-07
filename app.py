@@ -167,8 +167,5 @@ with col1:
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-with col2:
-    st.video(VIDEO_PATH)
-
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
