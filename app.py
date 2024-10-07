@@ -8,12 +8,13 @@ from sklearn.ensemble import RandomForestRegressor
 import joblib
 import requests
 import io
+import gdown
+import tempfile
 
 # File URLs
-MODEL_URL = "https://drive.google.com/uc?export=download&id=1NjXo2WpoSKCQqzQg_juYO83xf1Lhr-ks"
+MODEL_URL = "https://drive.google.com/uc?id=1NjXo2WpoSKCQqzQg_juYO83xf1Lhr-ks"
 SCALER_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/your_scaler.joblib"
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
-VIDEO_PATH = r"C:\Users\alkoj\Downloads\Airline Offer Your Story Gehra Neela par Halka Neela aur Halka Peela ke saath Playful Style.mp4"  # Replace with your local video file path
 
 @st.cache_data
 def load_data(url):
@@ -22,17 +23,41 @@ def load_data(url):
 @st.cache_resource
 def download_file(url):
     response = requests.get(url)
-    return joblib.load(io.BytesIO(response.content))
+    st.write(f"Response status code: {response.status_code}")
+    st.write(f"Response content type: {response.headers.get('Content-Type')}")
+    st.write(f"Response content length: {len(response.content)} bytes")
+    try:
+        return joblib.load(io.BytesIO(response.content))
+    except Exception as e:
+        st.error(f"Error loading file: {str(e)}")
+        return None
+
+@st.cache_resource
+def download_model(url):
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        gdown.download(url, tmp_file.name, quiet=False)
+        st.write(f"Model file size: {os.path.getsize(tmp_file.name)} bytes")
+        try:
+            model = joblib.load(tmp_file.name)
+            return model
+        except Exception as e:
+            st.error(f"Error loading model: {str(e)}")
+            return None
 
 @st.cache_resource
 def load_model_and_scaler():
-    model = download_file(MODEL_URL)
+    model = download_model(MODEL_URL)
     scaler = download_file(SCALER_URL)
     return model, scaler
 
 # Load data, model, and scaler
 df = load_data(CSV_URL)
 model, scaler = load_model_and_scaler()
+
+if model is None or scaler is None:
+    st.error("Failed to load model or scaler. Please check the console for more information.")
+else:
+    st.success("Model and scaler loaded successfully!")
 
 # ... (rest of your code remains the same)
 # Custom CSS for a cleaner look with white background
