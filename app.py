@@ -14,6 +14,19 @@ import joblib
 import requests
 import io
 
+# Logo URL - replace with your actual logo URL from GitHub
+LOGO_URL = "https://github.com/Alko2122/Uni/blob/688014181dadcf69ccc216a6cb705aa11fe5fd0e/image-removebg-preview.png"
+
+   }}
+    .logo-img {{
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 100px;  /* Adjust size as needed */
+        z-index: 999;
+    }}
+<img src="{LOGO_URL}" class="logo-img">
+
 # File URL
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
