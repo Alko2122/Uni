@@ -19,12 +19,7 @@ LOGO_URL = "https://github.com/Alko2122/Uni/blob/688014181dadcf69ccc216a6cb705aa
 
 # Custom CSS to create a background and position the logo
 st.markdown(f"""
-<style>
-    .stApp {{
-        background: linear-gradient(135deg, #ffffff 25%, #f0f0f0 25%, #f0f0f0 50%, #ffffff 50%, #ffffff 75%, #f0f0f0 75%, #f0f0f0 100%);
-        background-size: 20px 20px;
-        background-attachment: fixed;
-    }}
+
     .logo-img {{
         position: fixed;
         top: 20px;
