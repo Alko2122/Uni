@@ -1,5 +1,5 @@
 pip install streamlit
-pandas
+pip install pandas
 numpy
 scikit-learn
 geopy
