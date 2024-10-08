@@ -225,7 +225,7 @@ if st.button("Calculate Fare"):
         st.markdown(f"<p class='medium-font'>Estimated Fare: ${pred_fare:.2f}</p>", unsafe_allow_html=True)
         st.write(f"Flight Distance: {distance_value:.2f} miles")
     else:
-        st.error("Unable to geocode one or both of the airports. Please try different airports.")
+        st.error("The airport is not currently in operation")
 
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
