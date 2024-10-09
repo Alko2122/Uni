@@ -18,8 +18,8 @@ import io
 CSV_URL = "https://raw.githubusercontent.com/Alko2122/Uni/756569d0500e6c5d5d6e6e1b5b949b423e3349d2/Airline%20Dataset%20-%20Cleaned%20(CSV)%20(Readjusted).csv"
 
 @st.cache_data
-def load_data(url):
-    return pd.read_csv(url)
+def load_data(CSV_URL):
+    return pd.read_csv(CSV_URL)
 
 def remove_outliers(df, columns, lower_quantile=0.20, upper_quantile=0.90):
     df_clean = df.copy()
@@ -175,56 +175,6 @@ if st.button("Show Model Metrics and Visualizations"):
     st.sidebar.pyplot(feature_imp_fig)
     st.sidebar.dataframe(feature_importance)
 
-# New side panel for EDA
-if st.button("Show EDA and Visualizations"):
-    st.sidebar.title("Exploratory Data Analysis")
-    
-    # Distribution Plot for 'fare', 'passengers', 'nsmiles', 'large_ms'
-    st.sidebar.markdown("### Distribution of Fare")
-    fig_fare, ax_fare = plt.subplots()
-    sns.histplot(df['fare'], kde=True, ax=ax_fare)
-    st.sidebar.pyplot(fig_fare)
-    
-    st.sidebar.markdown("### Distribution of Passengers")
-    fig_passengers, ax_passengers = plt.subplots()
-    sns.histplot(df['passengers'], kde=True, ax=ax_passengers)
-    st.sidebar.pyplot(fig_passengers)
-    
-    st.sidebar.markdown("### Distribution of Distance (nsmiles)")
-    fig_nsmiles, ax_nsmiles = plt.subplots()
-    sns.histplot(df['nsmiles'], kde=True, ax=ax_nsmiles)
-    st.sidebar.pyplot(fig_nsmiles)
-    
-    st.sidebar.markdown("### Distribution of Large Market Share (large_ms)")
-    fig_large_ms, ax_large_ms = plt.subplots()
-    sns.histplot(df['large_ms'], kde=True, ax=ax_large_ms)
-    st.sidebar.pyplot(fig_large_ms)
-
-    # Pair Plot for key features
-    st.sidebar.markdown("### Pair Plot of Key Features")
-    selected_columns = ['fare', 'passengers', 'nsmiles', 'large_ms']
-    pair_plot_fig = sns.pairplot(df[selected_columns])
-    st.sidebar.pyplot(pair_plot_fig)
-
-    # Box Plot of Fare by Departure Airport
-    st.sidebar.markdown("### Box Plot: Fare by Departure Airport")
-    fig_box_airport, ax_box_airport = plt.subplots(figsize=(12, 6))
-    sns.boxplot(x='airport_1', y='fare', data=df, ax=ax_box_airport)
-    plt.xticks(rotation=90)
-    st.sidebar.pyplot(fig_box_airport)
-
-    # Scatter Plot: Passengers vs Distance (nsmiles)
-    st.sidebar.markdown("### Scatter Plot: Passengers vs Distance")
-    fig_scatter_passengers, ax_scatter_passengers = plt.subplots(figsize=(10, 6))
-    sns.scatterplot(x='nsmiles', y='passengers', data=df, ax=ax_scatter_passengers)
-    st.sidebar.pyplot(fig_scatter_passengers)
-
-    # Scatter Plot: Fare vs Market Share (large_ms)
-    st.sidebar.markdown("### Scatter Plot: Fare vs Market Share")
-    fig_scatter_fare, ax_scatter_fare = plt.subplots(figsize=(10, 6))
-    sns.scatterplot(x='large_ms', y='fare', data=df, ax=ax_scatter_fare)
-    st.sidebar.pyplot(fig_scatter_fare)
-
 # Input form with widgets
 st.markdown("## Fare Prediction")
 
@@ -248,34 +198,24 @@ if st.button("Calculate Fare"):
     arrival_location = geolocator.geocode(f"{arrival_airport}, USA")
     
     if departure_location and arrival_location:
-        distance_value = calculate_distance(
-            (departure_location.latitude, departure_location.longitude),
-            (arrival_location.latitude, arrival_location.longitude)
-        )
+        departure_coords = (departure_location.latitude, departure_location.longitude)
+        arrival_coords = (arrival_location.latitude, arrival_location.longitude)
+        distance_miles = calculate_distance(departure_coords, arrival_coords)
         
-        # Prepare input for prediction
-        passenger_density = passenger_count / distance_value
-        fare_per_mile = df_clean['fare_per_mile'].mean()  # Use mean fare_per_mile as an estimate
-        
-        input_data = pd.DataFrame([[
-            passenger_count,
-            0,  # placeholder for large_ms
-            distance_value,
-            passenger_density,
-            fare_per_mile
-        ]], columns=['passengers', 'large_ms', 'nsmiles', 'passenger_density', 'fare_per_mile'])
+        # Feature preparation for model input
+        input_data = pd.DataFrame({
+            'passengers': [passenger_count],
+            'nsmiles': [distance_miles],
+            'large_ms': [0.15],  # Assuming average market share
+            'passenger_density': [passenger_count / distance_miles],
+            'fare_per_mile': [0]  # Placeholder
+        })
         
         input_data_log = np.log1p(input_data)
         input_data_scaled = pd.DataFrame(scaler.transform(input_data_log), columns=input_data.columns)
         
-        # Predict fare
-        pred_fare = model.predict(input_data_scaled)[0]
-        
-        st.markdown("---")
-        st.markdown(f"<p class='medium-font'>Estimated Fare: ${pred_fare:.2f}</p>", unsafe_allow_html=True)
-        st.write(f"Flight Distance: {distance_value:.2f} miles")
+        # Fare prediction
+        predicted_fare = model.predict(input_data_scaled)[0]
+        st.success(f"Predicted Fare for {passenger_count} passengers: ${predicted_fare:.2f}")
     else:
-        st.error("The airport is not currently in operation")
-
-st.markdown("---")
-st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
+        st.error("Unable to locate one or both airports. Please check the airport names.")
