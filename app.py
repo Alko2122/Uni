@@ -90,45 +90,56 @@ def prepare_model_and_data(df):
     
     return rf_model, scaler, mae, mse, rmse, r2, df_clean, X_test_scaled, y_test, y_pred_rf
 
-def plot_histograms(df):
-    features = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
-    axes = axes.flatten()
-    for i, feature in enumerate(features):
-        sns.histplot(df[feature], kde=True, ax=axes[i], color='skyblue')
-        axes[i].set_title(f'Distribution of {feature}')
+def plot_correlation_matrix(df):
+    columns_to_include = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    data_for_correlation = df[columns_to_include].dropna()
+    correlation_matrix = data_for_correlation.corr()
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", square=True, cbar_kws={"shrink": .8}, ax=ax)
+    plt.title('Correlation Matrix')
     plt.tight_layout()
     return fig
 
-def plot_boxplots(df):
-    features = ['fare', 'large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
-    axes = axes.flatten()
-    for i, feature in enumerate(features):
-        sns.boxplot(y=df[feature], ax=axes[i], color='lightgreen')
-        axes[i].set_title(f'Boxplot of {feature}')
-    plt.tight_layout()
-    return fig
-
-def plot_pairwise_relationships(df):
-    features = ['fare', 'large_ms', 'nsmiles', 'passengers']
-    fig = sns.pairplot(df[features], diag_kind='kde', plot_kws={'alpha': 0.5})
-    return fig
-
-def plot_missing_values(df):
-    missing_values = df.isnull().sum()
-    missing_values = missing_values[missing_values > 0]
-    if missing_values.empty:
-        st.sidebar.write("No missing values in the dataset.")
-        return None
+def plot_vif(df):
+    features = ['large_ms', 'nsmiles', 'passengers', 'passenger_density', 'fare_per_mile']
+    X = df[features]
+    vif_data = pd.DataFrame()
+    vif_data["Variable"] = X.columns
+    vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+    vif_data = vif_data.sort_values('VIF', ascending=False)
+    
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(missing_values.index, missing_values.values, color='coral')
-    ax.set_title('Missing Values in Each Feature')
+    ax.bar(vif_data['Variable'], vif_data['VIF'])
+    ax.set_title('Variance Inflation Factor for Each Feature')
     ax.set_xlabel('Features')
-    ax.set_ylabel('Number of Missing Values')
+    ax.set_ylabel('VIF')
     plt.xticks(rotation=45)
     plt.tight_layout()
+    return fig, vif_data
+
+def plot_actual_vs_predicted(y_test, y_pred):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(y_test, y_pred, alpha=0.5)
+    ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', linestyle='--')
+    ax.set_title('Actual vs Predicted Fare')
+    ax.set_xlabel('Actual Fare')
+    ax.set_ylabel('Predicted Fare')
+    ax.grid()
     return fig
+
+def plot_feature_importance(model, X):
+    feature_importance = pd.DataFrame({'feature': X.columns, 'importance': model.feature_importances_})
+    feature_importance = feature_importance.sort_values('importance', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(feature_importance['feature'], feature_importance['importance'])
+    ax.set_title('Feature Importance')
+    ax.set_xlabel('Features')
+    ax.set_ylabel('Importance')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return fig, feature_importance
 
 # Load data and prepare model
 df = load_data(CSV_URL)
@@ -164,26 +175,55 @@ if st.button("Show Model Metrics and Visualizations"):
     st.sidebar.pyplot(feature_imp_fig)
     st.sidebar.dataframe(feature_importance)
 
-# **New Button for EDA and Visualizations**
-if st.button("Show EDA and Additional Visualizations"):
-    st.sidebar.title("EDA and Additional Visualizations")
+# New side panel for EDA
+if st.button("Show EDA and Visualizations"):
+    st.sidebar.title("Exploratory Data Analysis")
     
-    st.sidebar.markdown("## Histograms of Features")
-    hist_fig = plot_histograms(df_clean)
-    st.sidebar.pyplot(hist_fig)
+    # Distribution Plot for 'fare', 'passengers', 'nsmiles', 'large_ms'
+    st.sidebar.markdown("### Distribution of Fare")
+    fig_fare, ax_fare = plt.subplots()
+    sns.histplot(df['fare'], kde=True, ax=ax_fare)
+    st.sidebar.pyplot(fig_fare)
     
-    st.sidebar.markdown("## Boxplots of Features")
-    box_fig = plot_boxplots(df_clean)
-    st.sidebar.pyplot(box_fig)
+    st.sidebar.markdown("### Distribution of Passengers")
+    fig_passengers, ax_passengers = plt.subplots()
+    sns.histplot(df['passengers'], kde=True, ax=ax_passengers)
+    st.sidebar.pyplot(fig_passengers)
     
-    st.sidebar.markdown("## Pairwise Relationships")
-    pair_fig = plot_pairwise_relationships(df_clean)
-    st.sidebar.pyplot(pair_fig)
+    st.sidebar.markdown("### Distribution of Distance (nsmiles)")
+    fig_nsmiles, ax_nsmiles = plt.subplots()
+    sns.histplot(df['nsmiles'], kde=True, ax=ax_nsmiles)
+    st.sidebar.pyplot(fig_nsmiles)
     
-    st.sidebar.markdown("## Missing Values Analysis")
-    missing_fig = plot_missing_values(df_clean)
-    if missing_fig:
-        st.sidebar.pyplot(missing_fig)
+    st.sidebar.markdown("### Distribution of Large Market Share (large_ms)")
+    fig_large_ms, ax_large_ms = plt.subplots()
+    sns.histplot(df['large_ms'], kde=True, ax=ax_large_ms)
+    st.sidebar.pyplot(fig_large_ms)
+
+    # Pair Plot for key features
+    st.sidebar.markdown("### Pair Plot of Key Features")
+    selected_columns = ['fare', 'passengers', 'nsmiles', 'large_ms']
+    pair_plot_fig = sns.pairplot(df[selected_columns])
+    st.sidebar.pyplot(pair_plot_fig)
+
+    # Box Plot of Fare by Departure Airport
+    st.sidebar.markdown("### Box Plot: Fare by Departure Airport")
+    fig_box_airport, ax_box_airport = plt.subplots(figsize=(12, 6))
+    sns.boxplot(x='airport_1', y='fare', data=df, ax=ax_box_airport)
+    plt.xticks(rotation=90)
+    st.sidebar.pyplot(fig_box_airport)
+
+    # Scatter Plot: Passengers vs Distance (nsmiles)
+    st.sidebar.markdown("### Scatter Plot: Passengers vs Distance")
+    fig_scatter_passengers, ax_scatter_passengers = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x='nsmiles', y='passengers', data=df, ax=ax_scatter_passengers)
+    st.sidebar.pyplot(fig_scatter_passengers)
+
+    # Scatter Plot: Fare vs Market Share (large_ms)
+    st.sidebar.markdown("### Scatter Plot: Fare vs Market Share")
+    fig_scatter_fare, ax_scatter_fare = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x='large_ms', y='fare', data=df, ax=ax_scatter_fare)
+    st.sidebar.pyplot(fig_scatter_fare)
 
 # Input form with widgets
 st.markdown("## Fare Prediction")
@@ -232,10 +272,10 @@ if st.button("Calculate Fare"):
         pred_fare = model.predict(input_data_scaled)[0]
         
         st.markdown("---")
-        st.markdown(f"**Estimated Fare:** ${pred_fare:.2f}")
+        st.markdown(f"<p class='medium-font'>Estimated Fare: ${pred_fare:.2f}</p>", unsafe_allow_html=True)
         st.write(f"Flight Distance: {distance_value:.2f} miles")
     else:
         st.error("The airport is not currently in operation")
 
 st.markdown("---")
-st.markdown("About | Contact | Terms of Service")
+st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
