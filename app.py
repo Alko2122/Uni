@@ -225,7 +225,7 @@ if st.button("Calculate Fare"):
         st.markdown(f"<p class='medium-font'>Estimated Fare: ${pred_fare:.2f}</p>", unsafe_allow_html=True)
         st.write(f"Flight Distance: {distance_value:.2f} miles")
     else:
-        st.error("The airport is not currently in operation")
+        st.error("The airport is not currently in operation with the airlines stored in the dataset. Please choose another airport.")
 
 st.markdown("---")
 st.markdown("<p class='small-font'>About | Contact | Terms of Service</p>", unsafe_allow_html=True)
